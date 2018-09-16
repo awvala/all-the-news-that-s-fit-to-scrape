@@ -4,154 +4,111 @@ const axios = require("axios");
 const request = require("request");
 const cheerio = require("cheerio");
 const mongoose = require("mongoose");
-
-const db = require("./models");
+//const db = require("./models");
 
 // Set mongoose to leverage Built in JavaScript ES6 Promises
 mongoose.Promise = Promise;
 
-
 module.exports = function (app) {
-    // Default Route
-    app.get("/", (req, res) => res.render("index"));
+    // Landing page
+    app.get("/", function (req, res) {
+        res.render("index");
+        console.log("I made a scrape!")
+    });
 
-    // Scrape Articles Route
-    app.get("/api/search", (req, res) => {
+    // Retrieve data from the db
+    app.get("/all", function (req, res) {
+        // Find all results from the scrapedData collection in the db
+        db.scrapedData.find({}, function (error, found) {
+            // Throw any errors to the console
+            if (error) {
+                console.log(error);
+            }
+            // If there are no errors, send the data to the browser as json
+            else {
+                res.json(found);
+            }
+        });
+    });
 
-        axios.get("https://www.npr.org/sections/news/").then(response => {
-            // First, we grab the body of the html with request
-            const $ = cheerio.load(response.data);
+// A GET route for scraping the echoJS website
+app.get("/scrape", function (req, res) {
+    // First, we grab the body of the html with request
+    axios.get("https://kotaku.com/").then(function (response) {
+      // Then, we load that into cheerio and save it to $ for a shorthand selector
+      var $ = cheerio.load(response.data);
 
-            // Initialize Empty Object to Store Cheerio Objects
-            let handlebarsObject = {
-                data: []
-            };
+      $(".js_post-wrapper").each(function (i, element) {
+          // Save an empty result object
+      var result = {};
+        // Add the text and href of every link, and save them as properties of the result object
+        result.title = $(this)
+        .find(".entry-title").children("a").text();
+        result.link = $(this)
+        .find(".entry-title").children("a").attr("href");
+        result.auther = $(element).find(".meta__byline").children("a").text();
+        result.summary = $(element).find(".entry-summary").children("p").text();
+        result.image = $(element).find(".lazy-image").find("img").attr("src");
 
+    // Create a new Article using the `result` object built from scraping
+      db.Article.create(result)
+      .then(function (dbArticle) {
+        // View the added result in the console
+        console.log(dbArticle);
+      })
+      .catch(function (err) {
+        // If an error occurred, send it to the client
+        return res.json(err);
+      });
+  });
+
+  // If we were able to successfully scrape and save an Article, send a message to the client
+  res.send("Scrape Complete");
+});
+});
+
+/*
+    // Scrape data from one site and place it into the mongodb db
+    app.get("/scrape", function (req, res) {
+        // Make a request for the news section of `kotaku`
+        request("https://kotaku.com/", function (error, response, html) {
+            // Load the html body from request into cheerio
+            const $ = cheerio.load(html);
+            // For each element with a "title" class
             $(".js_post-wrapper").each(function (i, element) {
-                handlebarsObject.data.push({ // Store Scrapped Data into handlebarsObject
-                    title: $(element).find(".entry-title").children("a").text(),
-                    link: $(element).find(".entry-title").children("a").attr("href"),
-                    author: $(element).find(".meta__byline").children("a").text(),
-                    summary: $(element).find(".entry-summary").children("p").text(),
-                    image: $(element).find(".lazy-image").find("img").attr("src"),
-                    comments: null
-                }); // Store HTML Data as an Object within an Object
-            }); // End of Article Search
+                // Save the text and href of each link enclosed in the current element
+                const title = $(element).find(".entry-title").children("a").text();
+                const link = $(element).find(".entry-title").children("a").attr("href");
+                const author = $(element).find(".meta__byline").children("a").text();
+                const summary = $(element).find(".entry-summary").children("p").text();
+                const image = $(element).find(".lazy-image").find("img").attr("src");
 
-            // Return Scrapped Data to Handlebars for Rendering
-            res.render("index", handlebarsObject);
-        });
-    });
-
-    // Add Article Route
-    app.post("/api/add", (req, res) => {
-
-        const articleObject = req.body;
-
-        // Save the Article to the Database
-        db.Articles.
-            findOne({ link: articleObject.link }). // Look for an Existing Article with the Same URL
-            then(function (response) {
-
-                if (response === null) { // Only Create Article if it has not been Created
-                    db.Articles.create(articleObject).then((response) => console.log(" ")).catch(err => res.json(err));
-                }
-                // If we were able to successfully save an Article, send a message to the client
-                res.send("Article Saved");
-            }).catch(function (err) {
-                // If an error occurred, send it to the client
-                res.json(err);
-            });
-    });
-
-    // Saved Article Route
-    app.get("/api/savedArticles", (req, res) => {
-        // Grab every document in the Articles collection
-        db.Articles.find({}). // Find all Saved Articles
-            then(function (dbArticle) {
-                // If we were able to successfully find Articles, send them back to the client
-                res.json(dbArticle);
-            }).catch(function (err) {
-                // If an error occurred, send it to the client
-                res.json(err);
-            });
-    });
-
-    // Delete Article Route
-    app.post("/api/deleteArticle", (req, res) => {
-        sessionArticle = req.body;
-
-        db.Articles.findByIdAndRemove(sessionArticle["_id"]). // Look for the Article and Remove from DB
-            then(response => {
-                if (response) {
-                    res.send("Sucessfully Deleted");
+                // If this found element has all requested properties, create a document in the scrapedData db
+                if (title && link && author && summary && image) {
+                    // Insert the data in the scrapedData db
+                    db.scrapedData.insert({
+                        title: title,
+                        link: link,
+                        author: author,
+                        summary: summary,
+                        image: image
+                    },
+                        function (err, inserted) {
+                            if (err) {
+                                // Log the error if one is encountered during the query
+                                console.log(err);
+                            }
+                            else {
+                                // Otherwise, log the inserted data
+                                console.log(inserted);
+                            }
+                        });
                 }
             });
-    }); // End deleteArticle Route
-
-    // Delete Comment Route
-    app.post("/api/deleteComment", (req, res) => {
-        const comment = req.body;
-        db.Notes.findByIdAndRemove(comment["_id"]). // Look for the Comment and Remove from DB
-            then(response => {
-                if (response) {
-                    res.send("Sucessfully Deleted");
-                }
-            });
-    }); // End delete Article Route
-
-    // Create Notes Route
-    app.post("/api/createNotes", (req, res) => {
-        sessionArticle = req.body;
-        db.Notes.create(sessionArticle.body).then(function (dbNote) {
-            return db.Articles.findOneAndUpdate({
-                _id: sessionArticle.articleID.articleID
-            }, {
-                    $push: {
-                        note: dbNote._id
-                    }
-                });
-        }).then(function (dbArticle) {
-            // If we were able to successfully update an Article, send it back to the client
-            res.json(dbArticle);
-        }).catch(function (err) {
-            // If an error occurred, send it to the client
-            res.json(err);
-        });
-    }); // End Create Notes Route
-
-    // Route for grabbing a specific Article by id, populate it with it's note
-  app.post("/api/populateNote", function(req, res) {
-    // Using the id passed in the id parameter, prepare a query that finds the matching one in our db...
-    // console.log("ID is "+ req.body.articleID);
-
-    db.Articles.findOne({_id: req.body.articleID}).populate("Note"). // Associate Notes with the Article ID
-    then((response) => {
-
-      if (response.note.length == 1) { // Note Has 1 Comment
-
-        db.Notes.findOne({'_id': response.note}).then((comment) => {
-          comment = [comment];
-          console.log("Sending Back One Comment");
-          res.json(comment); // Send Comment back to the Client
         });
 
-      } else { // Note Has 0 or more than 1 Comments
-
-        console.log("2")
-        db.Notes.find({
-          '_id': {
-            "$in": response.note
-          }
-        }).then((comments) => {
-          // console.log("Sending Back Multiple Comments");
-          res.json(comments); // Send Comments back to the Client
-        });
-      }
-      // If we were able to successfully find an Article with the given id, send it back to the client
-    }).catch(function(err) {
-      // If an error occurred, send it to the client
-      res.json(err);
+        // Send a "Scrape Complete" message to the browser
+        res.send("Scrape Complete");
     });
-  }); // End of Post Populate Note
+    */
 };
