@@ -62,6 +62,11 @@ app.set("view engine", "handlebars");
 //    syncOptions.force = true;
 //}
 
+app.get("/", function (req, res) {
+    res.render("index");
+    //console.log("I made a scrape!")
+});
+
 // Route to scrape Kotaku
 app.get("/scrape", function (req, res) {
     // First, we grab the body of the html with request
@@ -69,33 +74,46 @@ app.get("/scrape", function (req, res) {
         // Then, we load that into cheerio and save it to $ for a shorthand selector
         var $ = cheerio.load(response.data);
 
+        let handlebarsObject = {
+            data: []
+        }; // Initialize Empty Object to Store Cheerio Objects
+
         $(".js_post-wrapper").each(function (i, element) {
             // Save an empty result object
-            var result = {};
+            //var result = {};
+            handlebarsObject.data.push({ // Store Scrapped Data into handlebarsObject
+                title: $(element).find(".entry-title").children("a").text(),
+                summary: $(element).find(".entry-summary").children("p").text(),
+                link: $(element).find(".entry-title").children("a").attr("href"),
+                author: $(element).find(".meta__byline").children("a").text(),
+                image: $(element).find(".lazy-image").find("img").attr("src"),
+                comments: null
+            }); // Store HTML Data as an Object within an Object
+
             // Add the text and href of every link, and save them as properties of the result object
-            result.title = $(this)
-                .find(".entry-title").children("a").text();
-            result.link = $(this)
-                .find(".entry-title").children("a").attr("href");
-            result.auther = $(element).find(".meta__byline").children("a").text();
-            result.summary = $(element).find(".entry-summary").children("p").text();
-            result.image = $(element).find(".lazy-image").find("img").attr("src");
+            //result.title = $(this)
+            //    .find(".entry-title").children("a").text();
+            //result.link = $(this)
+            //    .find(".entry-title").children("a").attr("href");
+            //result.author = $(element).find(".meta__byline").children("a").text();
+            //result.summary = $(element).find(".entry-summary").children("p").text();
+            //result.image = $(element).find(".lazy-image").find("img").attr("src");
 
             // Create a new Article using the `result` object built from scraping
-            db.Article.create(result)
-                .then(function (dbArticle) {
-                    // View the added result in the console
-                    console.log(dbArticle);
-                })
-                .catch(function (err) {
-                    // If an error occurred, send it to the client
-                    return res.json(err);
-                });
+            //db.Article.create(result)
+            //    .then(function (dbArticle) {
+            // View the added result in the console
+            //        console.log(dbArticle);
+            //    })
+            //    .catch(function (err) {
+            // If an error occurred, send it to the client
+            //        return res.json(err);
+            res.render("/", handlebarsObject);
         });
-
-        // If we were able to successfully scrape and save an Article, send a message to the client
-        res.send("Scrape Complete");
     });
+
+    // If we were able to successfully scrape and save an Article, send a message to the client
+    res.send("Scrape Complete");
 });
 
 // Route for getting all Articles from the db
