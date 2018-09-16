@@ -22,6 +22,43 @@ module.exports = function (app) {
         });
     });
 
+// A GET route for scraping the echoJS website
+app.get("/scrape", function (req, res) {
+    // First, we grab the body of the html with request
+    axios.get("https://kotaku.com/").then(function (response) {
+      // Then, we load that into cheerio and save it to $ for a shorthand selector
+      var $ = cheerio.load(response.data);
+
+      $(".js_post-wrapper").each(function (i, element) {
+          // Save an empty result object
+      var result = {};
+        // Add the text and href of every link, and save them as properties of the result object
+        result.title = $(this)
+        .find(".entry-title").children("a").text();
+        result.link = $(this)
+        .find(".entry-title").children("a").attr("href");
+        result.auther = $(element).find(".meta__byline").children("a").text();
+        result.summary = $(element).find(".entry-summary").children("p").text();
+        result.image = $(element).find(".lazy-image").find("img").attr("src");
+
+    // Create a new Article using the `result` object built from scraping
+      db.Article.create(result)
+      .then(function (dbArticle) {
+        // View the added result in the console
+        console.log(dbArticle);
+      })
+      .catch(function (err) {
+        // If an error occurred, send it to the client
+        return res.json(err);
+      });
+  });
+
+  // If we were able to successfully scrape and save an Article, send a message to the client
+  res.send("Scrape Complete");
+});
+});
+
+/*
     // Scrape data from one site and place it into the mongodb db
     app.get("/scrape", function (req, res) {
         // Make a request for the news section of `kotaku`
@@ -64,4 +101,5 @@ module.exports = function (app) {
         // Send a "Scrape Complete" message to the browser
         res.send("Scrape Complete");
     });
+    */
 };
